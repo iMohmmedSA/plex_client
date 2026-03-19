@@ -1,0 +1,88 @@
+pub mod auth;
+pub mod builder;
+pub mod crypto;
+pub mod inner;
+
+use std::sync::Arc;
+
+use crate::{
+    client::{builder::ClientBuilder, inner::ClientInner},
+    error::{Error, Result},
+    headers::TOKEN,
+};
+use serde::de::DeserializeOwned;
+
+pub(crate) enum Base {
+    Plex,    // plex.tv
+    Clients, // clients.plex.tv
+}
+
+impl Base {
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Base::Plex => "https://plex.tv",
+            Base::Clients => "https://clients.plex.tv",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Client {
+    pub(crate) inner: Arc<ClientInner>,
+}
+
+impl Client {
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::default()
+    }
+
+    pub(crate) async fn get<T: DeserializeOwned>(&self, base: Base, path: &str) -> Result<T> {
+        self.request(base, reqwest::Method::GET, path, None::<serde_json::Value>)
+            .await
+    }
+
+    pub(crate) async fn post<T, B>(&self, base: Base, path: &str, body: Option<B>) -> Result<T>
+    where
+        T: DeserializeOwned,
+        B: serde::Serialize,
+    {
+        self.request(base, reqwest::Method::POST, path, body).await
+    }
+
+    pub(crate) async fn request<T, B>(
+        &self,
+        base: Base,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<B>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        B: serde::Serialize,
+    {
+        // let url = format!("{}{}", self.inner.base_url, path);
+        let url = format!("{}{}", base.as_str(), path);
+        let mut request = self.inner.reqwest.request(method, &url);
+
+        if let Some(token) = &self.inner.token {
+            request = request.header(TOKEN, token);
+        }
+
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+
+        let response = request.send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let message = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::Api { status, message });
+        }
+
+        Ok(response.json().await?)
+    }
+}
