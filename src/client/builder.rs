@@ -40,8 +40,18 @@ impl ClientBuilder {
         self
     }
 
+    pub fn maybe_token(mut self, token: Option<impl Into<String>>) -> Self {
+        self.token = token.map(|t| t.into());
+        self
+    }
+
     pub fn product(mut self, product: impl Into<String>) -> Self {
         self.product = Some(product.into());
+        self
+    }
+
+    pub fn maybe_product(mut self, product: Option<impl Into<String>>) -> Self {
+        self.product = product.map(|p| p.into());
         self
     }
 
@@ -50,8 +60,18 @@ impl ClientBuilder {
         self
     }
 
+    pub fn maybe_version(mut self, version: Option<impl Into<String>>) -> Self {
+        self.version = version.map(|v| v.into());
+        self
+    }
+
     pub fn platform(mut self, platform: impl Into<String>) -> Self {
         self.platform = Some(platform.into());
+        self
+    }
+
+    pub fn maybe_platform(mut self, platform: Option<impl Into<String>>) -> Self {
+        self.platform = platform.map(|p| p.into());
         self
     }
 
@@ -60,8 +80,18 @@ impl ClientBuilder {
         self
     }
 
+    pub fn maybe_platform_version(mut self, platform_version: Option<impl Into<String>>) -> Self {
+        self.platform_version = platform_version.map(|v| v.into());
+        self
+    }
+
     pub fn device(mut self, device: impl Into<String>) -> Self {
         self.device = Some(device.into());
+        self
+    }
+
+    pub fn maybe_device(mut self, device: Option<impl Into<String>>) -> Self {
+        self.device = device.map(|d| d.into());
         self
     }
 
@@ -70,8 +100,18 @@ impl ClientBuilder {
         self
     }
 
+    pub fn maybe_device_vendor(mut self, device_vendor: Option<impl Into<String>>) -> Self {
+        self.device_vendor = device_vendor.map(|v| v.into());
+        self
+    }
+
     pub fn device_name(mut self, device_name: impl Into<String>) -> Self {
         self.device_name = Some(device_name.into());
+        self
+    }
+
+    pub fn maybe_device_name(mut self, device_name: Option<impl Into<String>>) -> Self {
+        self.device_name = device_name.map(|n| n.into());
         self
     }
 
@@ -80,8 +120,18 @@ impl ClientBuilder {
         self
     }
 
+    pub fn maybe_model(mut self, model: Option<impl Into<String>>) -> Self {
+        self.model = model.map(|m| m.into());
+        self
+    }
+
     pub fn marketplace(mut self, marketplace: impl Into<String>) -> Self {
         self.marketplace = Some(marketplace.into());
+        self
+    }
+
+    pub fn maybe_marketplace(mut self, marketplace: Option<impl Into<String>>) -> Self {
+        self.marketplace = marketplace.map(|m| m.into());
         self
     }
 
