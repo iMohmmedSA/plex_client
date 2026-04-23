@@ -26,6 +26,18 @@ impl Base {
     }
 }
 
+pub(crate) enum Api {
+    V2,
+}
+
+impl Api {
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Api::V2 => "/api/v2",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Client {
     pub(crate) inner: Arc<ClientInner>,
@@ -36,23 +48,26 @@ impl Client {
         ClientBuilder::default()
     }
 
-    pub(crate) async fn get<T: DeserializeOwned>(&self, base: Base, path: &str) -> Result<T> {
-        self.request(base, reqwest::Method::GET, path, None::<serde_json::Value>)
-            .await
-    }
-
-    pub(crate) async fn post<T, B>(&self, base: Base, path: &str, body: Option<B>) -> Result<T>
-    where
-        T: DeserializeOwned,
-        B: serde::Serialize,
-    {
-        self.request(base, reqwest::Method::POST, path, body).await
-    }
-
-    pub(crate) async fn request<T, B>(
+    pub(crate) async fn get<T: DeserializeOwned>(
         &self,
         base: Base,
-        method: reqwest::Method,
+        api: Api,
+        path: &str,
+    ) -> Result<T> {
+        self.request(
+            reqwest::Method::GET,
+            base,
+            api,
+            path,
+            None::<serde_json::Value>,
+        )
+        .await
+    }
+
+    pub(crate) async fn post<T, B>(
+        &self,
+        base: Base,
+        api: Api,
         path: &str,
         body: Option<B>,
     ) -> Result<T>
@@ -60,8 +75,23 @@ impl Client {
         T: DeserializeOwned,
         B: serde::Serialize,
     {
-        // let url = format!("{}{}", self.inner.base_url, path);
-        let url = format!("{}{}", base.as_str(), path);
+        self.request(reqwest::Method::POST, base, api, path, body)
+            .await
+    }
+
+    pub(crate) async fn request<T, B>(
+        &self,
+        method: reqwest::Method,
+        base: Base,
+        prefix: Api,
+        path: &str,
+        body: Option<B>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        B: serde::Serialize,
+    {
+        let url = format!("{}{}{}", base.as_str(), prefix.as_str(), path);
         let mut request = self.inner.reqwest.request(method, &url);
 
         if let Some(token) = &self.inner.token {

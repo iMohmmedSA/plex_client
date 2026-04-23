@@ -174,7 +174,6 @@ impl ClientBuilder {
         insert_opt(DEVICE_NAME, device_name.as_deref())?;
         insert_opt(MODEL, model.as_deref())?;
         insert_opt(MARKETPLACE, marketplace.as_deref())?;
-        drop(insert_opt); // release the mutable borrow of headers
 
         // User-Agent: "{product}/{version} - {crate_name}/{crate_version}"
         let lib_name: &str = env!("CARGO_PKG_NAME");

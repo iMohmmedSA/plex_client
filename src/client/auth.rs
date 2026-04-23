@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::{
     client::{
-        Base, Client,
+        Api, Base, Client,
         crypto::{DeviceKeypair, JwtClaims},
     },
     error::Result,
@@ -45,7 +45,7 @@ impl Client {
             jwk: keypair.to_jwk(),
             strong,
         };
-        self.post(Base::Clients, "/api/v2/pins", Some(body)).await
+        self.post(Base::Clients, Api::V2, "/pins", Some(body)).await
     }
 
     pub fn auth_url(&self, pin: &PinResponse, forward_url: Option<&str>) -> String {
@@ -84,15 +84,15 @@ impl Client {
         };
         let signed_jwt = keypair.sign_jwt(&claims)?;
         let path = format!(
-            "/api/v2/pins/{}?deviceJWT={}",
+            "/pins/{}?deviceJWT={}",
             pin_id,
             urlencoding::encode(&signed_jwt)
         );
-        self.get(Base::Clients, &path).await
+        self.get(Base::Clients, Api::V2, &path).await
     }
 
     pub async fn refresh_token(&self, keypair: &DeviceKeypair, scope: &str) -> Result<String> {
-        let nonce: NonceResponse = self.get(Base::Clients, "/api/v2/auth/nonce").await?;
+        let nonce: NonceResponse = self.get(Base::Clients, Api::V2, "/auth/nonce").await?;
 
         let now = chrono::Utc::now();
         let claims = JwtClaims {
@@ -107,7 +107,7 @@ impl Client {
 
         let body = serde_json::json!({ "jwt": signed_jwt });
         let response: TokenResponse = self
-            .post(Base::Clients, "/api/v2/auth/token", Some(body))
+            .post(Base::Clients, Api::V2, "/auth/token", Some(body))
             .await?;
 
         Ok(response.auth_token)

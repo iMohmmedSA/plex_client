@@ -5,19 +5,24 @@ edition = "2024"
 
 [workspace]
 members = [
-    ".",
+    ".", "example",
 ]
 
-[dependencies]
-reqwest = { version = "0.12", features = ["json"] }
+[workspace.dependencies]
+uuid = { version = "1", features = ["v4"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "hickory-dns"] }
+serde.workspace = true
+serde_json.workspace = true
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 url = "2"
 http = "1"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 base64 = "0.22"
-uuid = { version = "1", features = ["v4"] }
+uuid.workspace = true
 rand = "0.10"
 urlencoding = "2"
