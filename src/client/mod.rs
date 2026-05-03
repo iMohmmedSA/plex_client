@@ -48,51 +48,69 @@ impl Client {
         ClientBuilder::default()
     }
 
-    pub(crate) async fn get<T: DeserializeOwned>(
+    pub fn is_authenticated(&self) -> bool {
+        self.inner.token.is_some()
+    }
+
+    pub(crate) async fn get<T, Q>(
         &self,
         base: Base,
         api: Api,
         path: &str,
-    ) -> Result<T> {
+        query: Option<Q>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        Q: serde::Serialize,
+    {
         self.request(
             reqwest::Method::GET,
             base,
             api,
             path,
             None::<serde_json::Value>,
+            query,
         )
         .await
     }
 
-    pub(crate) async fn post<T, B>(
+    pub(crate) async fn post<T, B, Q>(
         &self,
         base: Base,
         api: Api,
         path: &str,
         body: Option<B>,
+        query: Option<Q>,
     ) -> Result<T>
     where
         T: DeserializeOwned,
         B: serde::Serialize,
+        Q: serde::Serialize,
     {
-        self.request(reqwest::Method::POST, base, api, path, body)
+        self.request(reqwest::Method::POST, base, api, path, body, query)
             .await
     }
 
-    pub(crate) async fn request<T, B>(
+    pub(crate) async fn request<T, B, Q>(
         &self,
         method: reqwest::Method,
         base: Base,
         prefix: Api,
         path: &str,
         body: Option<B>,
+        query: Option<Q>,
     ) -> Result<T>
     where
         T: DeserializeOwned,
         B: serde::Serialize,
+        Q: serde::Serialize,
     {
         let url = format!("{}{}{}", base.as_str(), prefix.as_str(), path);
         let mut request = self.inner.reqwest.request(method, &url);
+
+        if let Some(query) = query {
+            request = request.query(&query);
+        }
 
         if let Some(token) = &self.inner.token {
             request = request.header(TOKEN, token);

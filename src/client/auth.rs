@@ -45,7 +45,8 @@ impl Client {
             jwk: keypair.to_jwk(),
             strong,
         };
-        self.post(Base::Clients, Api::V2, "/pins", Some(body)).await
+        self.post(Base::Clients, Api::V2, "/pins", Some(body), None::<()>)
+            .await
     }
 
     pub fn auth_url(&self, pin: &PinResponse, forward_url: Option<&str>) -> String {
@@ -88,11 +89,13 @@ impl Client {
             pin_id,
             urlencoding::encode(&signed_jwt)
         );
-        self.get(Base::Clients, Api::V2, &path).await
+        self.get(Base::Clients, Api::V2, &path, None::<()>).await
     }
 
     pub async fn refresh_token(&self, keypair: &DeviceKeypair, scope: &str) -> Result<String> {
-        let nonce: NonceResponse = self.get(Base::Clients, Api::V2, "/auth/nonce").await?;
+        let nonce: NonceResponse = self
+            .get(Base::Clients, Api::V2, "/auth/nonce", None::<()>)
+            .await?;
 
         let now = chrono::Utc::now();
         let claims = JwtClaims {
@@ -107,7 +110,13 @@ impl Client {
 
         let body = serde_json::json!({ "jwt": signed_jwt });
         let response: TokenResponse = self
-            .post(Base::Clients, Api::V2, "/auth/token", Some(body))
+            .post(
+                Base::Clients,
+                Api::V2,
+                "/auth/token",
+                Some(body),
+                None::<()>,
+            )
             .await?;
 
         Ok(response.auth_token)
