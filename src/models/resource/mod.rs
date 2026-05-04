@@ -23,7 +23,7 @@ pub struct Resource {
     pub product_version: String,
     pub platform: String,
     pub platform_version: String,
-    pub device: String,
+    pub device: Option<String>,
     pub client_identifier: String,
     pub provides: String,
     pub owner_id: Option<u32>,
