@@ -1,7 +1,8 @@
 pub mod auth;
 pub mod builder;
 pub mod crypto;
-pub mod inner;
+mod inner;
+mod server;
 
 use std::sync::Arc;
 
