@@ -25,7 +25,7 @@ pub(crate) enum Status {
 
 #[derive(Debug)]
 pub(crate) struct Connection {
-    url: String,
+    pub url: String,
 
     status: Status,
     is_https: bool,

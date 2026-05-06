@@ -7,15 +7,16 @@ mod server;
 use std::sync::Arc;
 
 use crate::{
-    client::{builder::ClientBuilder, inner::ClientInner},
+    client::{builder::ClientBuilder, inner::ClientInner, server::Connection},
     error::{Error, Result},
     headers::TOKEN,
 };
 use serde::de::DeserializeOwned;
 
 pub(crate) enum Base {
-    Plex,    // plex.tv
-    Clients, // clients.plex.tv
+    Plex,                   // plex.tv
+    Clients,                // clients.plex.tv
+    Connection(Connection), // https://{ip}.{serverid}.plex.direct:32400
 }
 
 impl Base {
@@ -23,6 +24,7 @@ impl Base {
         match self {
             Base::Plex => "https://plex.tv",
             Base::Clients => "https://clients.plex.tv",
+            Base::Connection(c) => &c.url,
         }
     }
 }
