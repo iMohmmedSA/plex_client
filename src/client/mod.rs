@@ -2,14 +2,15 @@ pub mod auth;
 pub mod builder;
 pub mod crypto;
 mod inner;
-mod server;
+pub mod server;
 
 use std::sync::Arc;
 
 use crate::{
-    client::{builder::ClientBuilder, inner::ClientInner, server::Connection},
+    client::{builder::ClientBuilder, inner::ClientInner},
     error::{Error, Result},
     headers::TOKEN,
+    models::resource::Connection,
 };
 use serde::de::DeserializeOwned;
 
@@ -24,18 +25,20 @@ impl Base {
         match self {
             Base::Plex => "https://plex.tv",
             Base::Clients => "https://clients.plex.tv",
-            Base::Connection(c) => &c.url,
+            Base::Connection(c) => &c.uri,
         }
     }
 }
 
 pub(crate) enum Api {
+    Raw,
     V2,
 }
 
 impl Api {
     pub(crate) fn as_str(&self) -> &str {
         match self {
+            Api::Raw => "",
             Api::V2 => "/api/v2",
         }
     }
