@@ -7,10 +7,9 @@ pub mod server;
 use std::sync::Arc;
 
 use crate::{
-    client::{builder::ClientBuilder, inner::ClientInner},
+    client::{builder::ClientBuilder, inner::ClientInner, server::Connection},
     error::{Error, Result},
     headers::TOKEN,
-    models::resource::Connection,
 };
 use serde::de::DeserializeOwned;
 
@@ -25,7 +24,7 @@ impl Base {
         match self {
             Base::Plex => "https://plex.tv",
             Base::Clients => "https://clients.plex.tv",
-            Base::Connection(c) => &c.uri,
+            Base::Connection(c) => &c.url,
         }
     }
 }
@@ -118,7 +117,9 @@ impl Client {
             request = request.query(&query);
         }
 
-        if let Some(token) = &self.inner.token {
+        if let Base::Connection(connection) = base {
+            request = request.header(TOKEN, &(*connection.token));
+        } else if let Some(token) = &self.inner.token {
             request = request.header(TOKEN, token);
         }
 

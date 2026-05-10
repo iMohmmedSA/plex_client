@@ -1,10 +1,7 @@
 use crate::{
-    client::{Api, Base, Client},
+    client::{Api, Base, Client, server::Connection},
     error::Result,
-    models::{
-        resource::Connection,
-        server::{Identity, MediaContainer},
-    },
+    models::server::{Identity, MediaContainer},
 };
 
 #[allow(async_fn_in_trait)]
