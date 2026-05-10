@@ -6,13 +6,13 @@ use crate::{
 
 #[allow(async_fn_in_trait)]
 pub trait ServerRequest {
-    async fn get_identity(&self, connection: Connection) -> Result<MediaContainer<Identity>>;
+    async fn get_identity(&self, connection: &Connection) -> Result<MediaContainer<Identity>>;
 }
 
 impl ServerRequest for Client {
-    async fn get_identity(&self, connection: Connection) -> Result<MediaContainer<Identity>> {
+    async fn get_identity(&self, connection: &Connection) -> Result<MediaContainer<Identity>> {
         self.get(
-            Base::Connection(connection),
+            Base::Connection(connection.clone()),
             Api::Raw,
             "/identity",
             None::<()>,

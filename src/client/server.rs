@@ -10,15 +10,15 @@ use parking_lot::RwLock;
 
 use crate::{
     client::Client,
-    endpoints::ResourcesRequest,
+    endpoints::{ResourcesRequest, ServerRequest},
     error::Result,
-    models::resource::{Connection as ResourceConnection, Resource},
+    models::resource::Resource,
 };
 
 // 2.5 min
 const MAX_AGE: Duration = Duration::from_secs(150);
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub(crate) enum Status {
     #[default]
     Idle,
@@ -26,7 +26,7 @@ pub(crate) enum Status {
     Unreachable,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Connection {
     pub(crate) url: String,
     pub(crate) token: Arc<String>,
@@ -40,8 +40,7 @@ pub struct Connection {
 pub(crate) struct ProbeTarget {
     pub(crate) server_id: String,
     pub(crate) connection_index: u8,
-    pub(crate) url: String,
-    pub(crate) token: Arc<String>,
+    pub(crate) connection: Connection,
 }
 
 #[derive(Debug)]
@@ -153,13 +152,45 @@ impl ServerRegistry {
                 targets.push(ProbeTarget {
                     server_id: server.id.clone(),
                     connection_index,
-                    url: connection.url.clone(),
-                    token: server.token.clone(),
+                    connection: connection.clone(),
                 });
             }
         }
 
         targets
+    }
+
+    pub(crate) fn mark_probe_result(&self, target: &ProbeTarget, status: Status) {
+        let mut server = self.servers.write();
+
+        let Some(server) = server
+            .iter_mut()
+            .find(|server| server.id == target.server_id)
+        else {
+            return;
+        };
+
+        let Some(connection) = server.connections.get_mut(target.connection_index as usize) else {
+            return;
+        };
+
+        if connection.url != target.connection.url {
+            return;
+        }
+
+        connection.status = status;
+
+        match status {
+            Status::Reachable if server.best_connection_index.is_none() => {
+                server.best_connection_index = Some(target.connection_index)
+            }
+            Status::Unreachable
+                if server.best_connection_index == Some(target.connection_index) =>
+            {
+                server.best_connection_index = None
+            }
+            _ => (),
+        }
     }
 }
 
@@ -182,14 +213,21 @@ impl Client {
         };
 
         self.inner.registry.refresh(resources);
-        self.check_servers_reachable().await?; // TODO: what happens if it fails? does this mean ensure_servers_fresh fails too?
+        self.check_servers_reachable().await;
 
         Ok(())
     }
 
-    async fn check_servers_reachable(&self) -> Result<()> {
+    async fn check_servers_reachable(&self) {
         let targets = self.inner.registry.probe_targets();
 
-        Ok(())
+        for target in targets {
+            let status = match self.get_identity(&target.connection).await.is_ok() {
+                true => Status::Reachable,
+                false => Status::Unreachable,
+            };
+
+            self.inner.registry.mark_probe_result(&target, status);
+        }
     }
 }
