@@ -37,7 +37,7 @@ pub struct Connection {
     is_local: bool,
 }
 
-pub(crate) struct ProbeTarget {
+pub(crate) struct ServerTarget {
     pub(crate) server_id: String,
     pub(crate) connection_index: u8,
     pub(crate) connection: Connection,
@@ -136,7 +136,7 @@ impl ServerRegistry {
         self.refreshing.store(false, Ordering::Release);
     }
 
-    pub(crate) fn probe_targets(&self) -> Vec<ProbeTarget> {
+    pub(crate) fn servers_targets(&self) -> Vec<ServerTarget> {
         let mut servers = self.servers.write();
         let mut targets = Vec::new();
 
@@ -149,7 +149,7 @@ impl ServerRegistry {
                     continue;
                 };
 
-                targets.push(ProbeTarget {
+                targets.push(ServerTarget {
                     server_id: server.id.clone(),
                     connection_index,
                     connection: connection.clone(),
@@ -160,7 +160,48 @@ impl ServerRegistry {
         targets
     }
 
-    pub(crate) fn mark_probe_result(&self, target: &ProbeTarget, status: Status) {
+    pub(crate) fn server_targets(&self, server_id: &str) -> Vec<ServerTarget> {
+        let servers = self.servers.read();
+        let Some(server) = servers.iter().find(|server| server.id == server_id) else {
+            return vec![];
+        };
+
+        let mut targets: Vec<ServerTarget> = server
+            .connections
+            .iter()
+            .enumerate()
+            .filter_map(|(index, connection)| {
+                let connection_index = u8::try_from(index).ok()?;
+
+                if Some(connection_index) == server.best_connection_index {
+                    return None;
+                }
+
+                Some(ServerTarget {
+                    server_id: server_id.to_string(),
+                    connection_index,
+                    connection: connection.clone(),
+                })
+            })
+            .collect();
+
+        if let Some(best) = server.best_connection_index
+            && let Some(connection) = server.connections.get(best as usize)
+        {
+            targets.insert(
+                0,
+                ServerTarget {
+                    server_id: server_id.to_string(),
+                    connection_index: best,
+                    connection: connection.clone(),
+                },
+            );
+        };
+
+        targets
+    }
+
+    pub(crate) fn mark_server_result(&self, target: &ServerTarget, status: Status) {
         let mut server = self.servers.write();
 
         let Some(server) = server
@@ -219,7 +260,7 @@ impl Client {
     }
 
     async fn check_servers_reachable(&self) {
-        let targets = self.inner.registry.probe_targets();
+        let targets = self.inner.registry.servers_targets();
 
         for target in targets {
             let status = match self.get_identity(&target.connection).await.is_ok() {
@@ -227,7 +268,7 @@ impl Client {
                 false => Status::Unreachable,
             };
 
-            self.inner.registry.mark_probe_result(&target, status);
+            self.inner.registry.mark_server_result(&target, status);
         }
     }
 }
