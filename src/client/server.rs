@@ -1,17 +1,15 @@
 use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use parking_lot::RwLock;
+use tokio::sync::watch::{self, Receiver, Sender};
 
 use crate::{
     client::Client,
     endpoints::{ResourcesRequest, ServerRequest},
-    error::Result,
+    error::{Error, Result},
     models::resource::Resource,
 };
 
@@ -52,11 +50,18 @@ pub(crate) struct Server {
     connections: Vec<Connection>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RegistryState {
+    Empty,
+    Refreshing,
+    Ready(Instant),
+}
+
+#[derive(Debug)]
 pub(crate) struct ServerRegistry {
     servers: RwLock<Vec<Server>>,
-    last_refreshed: RwLock<Option<Instant>>,
-    refreshing: AtomicBool,
+    state_tx: Sender<RegistryState>,
+    state_rx: Receiver<RegistryState>,
 }
 
 impl Connection {
@@ -103,37 +108,38 @@ impl Server {
 }
 
 impl ServerRegistry {
-    pub(crate) fn refresh(&self, resources: Vec<Resource>) {
+    pub(crate) fn claim_refresh(&self) -> Option<RegistryState> {
+        let mut previous = None;
+        self.state_tx.send_if_modified(|state| match state {
+            RegistryState::Empty => {
+                previous = Some(RegistryState::Empty);
+                *state = RegistryState::Refreshing;
+                true
+            }
+            RegistryState::Ready(t) if t.elapsed() > MAX_AGE => {
+                previous = Some(RegistryState::Ready(*t));
+                *state = RegistryState::Refreshing;
+                true
+            }
+            _ => false,
+        });
+        previous
+    }
+
+    pub(crate) fn finish_refresh(&self, resources: Vec<Resource>) {
         let mut servers = self.servers.write();
         *servers = Server::from_resources(resources);
-
-        let mut last = self.last_refreshed.write();
-        *last = Some(Instant::now());
-
-        self.release_refreshing();
+        let _ = self.state_tx.send(RegistryState::Ready(Instant::now()));
     }
 
-    pub(crate) fn needs_refresh(&self) -> bool {
-        if self.refreshing.load(Ordering::Acquire) {
-            return false;
-        }
-
-        let stale = match *self.last_refreshed.read() {
-            None => true,
-            Some(t) => t.elapsed() > MAX_AGE,
-        };
-
-        if !stale {
-            return false;
-        }
-
-        self.refreshing
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
-    }
-
-    pub(crate) fn release_refreshing(&self) {
-        self.refreshing.store(false, Ordering::Release);
+    pub(crate) fn abort_refresh(&self, previous: RegistryState) {
+        self.state_tx.send_if_modified(|state| {
+            if *state == RegistryState::Refreshing {
+                *state = previous;
+                return true;
+            }
+            false
+        });
     }
 
     pub(crate) fn servers_targets(&self) -> Vec<ServerTarget> {
@@ -237,9 +243,17 @@ impl ServerRegistry {
 
 impl Client {
     pub(crate) async fn ensure_servers_fresh(&self) -> Result<()> {
-        if !self.inner.registry.needs_refresh() {
+        let Some(previous) = self.inner.registry.claim_refresh() else {
+            let mut rx = self.inner.registry.state_rx.clone();
+            rx.wait_for(|s| !matches!(s, RegistryState::Refreshing))
+                .await
+                .ok();
+
+            if matches!(*self.inner.registry.state_tx.borrow(), RegistryState::Empty) {
+                return Err(Error::ServerRefreshFailed);
+            }
             return Ok(());
-        }
+        };
 
         // TODO: We should have it configurable.
         // TODO: We need to add feature tokio.
@@ -248,12 +262,12 @@ impl Client {
         let resources = match self.get_resources(true, true, true).await {
             Ok(r) => r,
             Err(e) => {
-                self.inner.registry.release_refreshing();
+                self.inner.registry.abort_refresh(previous);
                 return Err(e);
             }
         };
 
-        self.inner.registry.refresh(resources);
+        self.inner.registry.finish_refresh(resources);
         self.check_servers_reachable().await;
 
         Ok(())
@@ -269,6 +283,17 @@ impl Client {
             };
 
             self.inner.registry.mark_server_result(&target, status);
+        }
+    }
+}
+
+impl Default for ServerRegistry {
+    fn default() -> Self {
+        let (state_tx, state_rx) = watch::channel(RegistryState::Empty);
+        Self {
+            servers: Default::default(),
+            state_tx,
+            state_rx,
         }
     }
 }
