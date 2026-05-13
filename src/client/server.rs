@@ -256,7 +256,6 @@ impl Client {
         };
 
         // TODO: We should have it configurable.
-        // TODO: We need to add feature tokio.
         // we will run this in background if we already have
         // servers that are reachable
         let resources = match self.get_resources(true, true, true).await {
@@ -277,9 +276,10 @@ impl Client {
         let targets = self.inner.registry.servers_targets();
 
         for target in targets {
-            let status = match self.get_identity(&target.connection).await.is_ok() {
-                true => Status::Reachable,
-                false => Status::Unreachable,
+            let status = match self.get_identity(&target.connection).await {
+                Ok(_) => Status::Reachable,
+                Err(e) if e.is_transport_failure() => Status::Unreachable,
+                Err(_) => Status::Reachable,
             };
 
             self.inner.registry.mark_server_result(&target, status);

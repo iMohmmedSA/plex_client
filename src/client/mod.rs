@@ -183,8 +183,8 @@ impl Client {
                         .mark_server_result(&target, Status::Reachable);
                     return Ok(value);
                 }
-                Err(error) if is_transport_failure(&error) => {
-                    last_transport_error = Some(error);
+                Err(e) if e.is_transport_failure() => {
+                    last_transport_error = Some(e);
                     self.inner
                         .registry
                         .mark_server_result(&target, Status::Unreachable);
@@ -197,20 +197,6 @@ impl Client {
             return Err(error);
         }
 
-        return Err(Error::Generic(format!(
-            "Server ({}) has no connections",
-            server_id
-        )));
-    }
-}
-
-fn is_transport_failure(error: &Error) -> bool {
-    match error {
-        Error::Network(e) => {
-            e.is_connect()
-                || e.is_timeout()
-                || (e.status().is_none() && !e.is_decode() && !e.is_builder() && !e.is_redirect())
-        }
-        _ => false,
+        return Err(Error::ServerNotFound(server_id.into()));
     }
 }
