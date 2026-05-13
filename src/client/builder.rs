@@ -194,6 +194,7 @@ impl ClientBuilder {
         let inner = Arc::new(ClientInner {
             reqwest: http_client,
             token: self.token,
+            registry: Default::default(),
             client_id,
             product,
         });

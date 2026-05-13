@@ -1,20 +1,26 @@
 pub mod auth;
 pub mod builder;
 pub mod crypto;
-pub mod inner;
+mod inner;
+pub mod server;
 
 use std::sync::Arc;
 
 use crate::{
-    client::{builder::ClientBuilder, inner::ClientInner},
+    client::{
+        builder::ClientBuilder,
+        inner::ClientInner,
+        server::{Connection, Status},
+    },
     error::{Error, Result},
     headers::TOKEN,
 };
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) enum Base {
-    Plex,    // plex.tv
-    Clients, // clients.plex.tv
+    Plex,                   // plex.tv
+    Clients,                // clients.plex.tv
+    Connection(Connection), // https://{ip}.{serverid}.plex.direct:32400
 }
 
 impl Base {
@@ -22,17 +28,21 @@ impl Base {
         match self {
             Base::Plex => "https://plex.tv",
             Base::Clients => "https://clients.plex.tv",
+            Base::Connection(c) => &c.url,
         }
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum Api {
+    Raw,
     V2,
 }
 
 impl Api {
     pub(crate) fn as_str(&self) -> &str {
         match self {
+            Api::Raw => "",
             Api::V2 => "/api/v2",
         }
     }
@@ -61,7 +71,7 @@ impl Client {
     ) -> Result<T>
     where
         T: DeserializeOwned,
-        Q: serde::Serialize,
+        Q: Serialize,
     {
         self.request(
             reqwest::Method::GET,
@@ -84,8 +94,8 @@ impl Client {
     ) -> Result<T>
     where
         T: DeserializeOwned,
-        B: serde::Serialize,
-        Q: serde::Serialize,
+        B: Serialize,
+        Q: Serialize,
     {
         self.request(reqwest::Method::POST, base, api, path, body, query)
             .await
@@ -102,8 +112,8 @@ impl Client {
     ) -> Result<T>
     where
         T: DeserializeOwned,
-        B: serde::Serialize,
-        Q: serde::Serialize,
+        B: Serialize,
+        Q: Serialize,
     {
         let url = format!("{}{}{}", base.as_str(), prefix.as_str(), path);
         let mut request = self.inner.reqwest.request(method, &url);
@@ -112,7 +122,9 @@ impl Client {
             request = request.query(&query);
         }
 
-        if let Some(token) = &self.inner.token {
+        if let Base::Connection(connection) = base {
+            request = request.header(TOKEN, &(*connection.token));
+        } else if let Some(token) = &self.inner.token {
             request = request.header(TOKEN, token);
         }
 
@@ -132,5 +144,59 @@ impl Client {
         }
 
         Ok(response.json().await?)
+    }
+
+    pub(crate) async fn request_server<T, B, Q>(
+        &self,
+        server_id: &str,
+        method: reqwest::Method,
+        prefix: Api,
+        path: &str,
+        body: Option<B>,
+        query: Option<Q>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        B: Serialize + Clone,
+        Q: Serialize + Clone,
+    {
+        self.ensure_servers_fresh().await?;
+        let targets = self.inner.registry.server_targets(server_id);
+        let mut last_transport_error = None;
+
+        for target in targets {
+            let result = self
+                .request(
+                    method.clone(),
+                    Base::Connection(target.connection.clone()),
+                    prefix,
+                    path,
+                    body.clone(),
+                    query.clone(),
+                )
+                .await;
+
+            match result {
+                Ok(value) => {
+                    self.inner
+                        .registry
+                        .mark_server_result(&target, Status::Reachable);
+                    return Ok(value);
+                }
+                Err(e) if e.is_transport_failure() => {
+                    last_transport_error = Some(e);
+                    self.inner
+                        .registry
+                        .mark_server_result(&target, Status::Unreachable);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        if let Some(error) = last_transport_error {
+            return Err(error);
+        }
+
+        return Err(Error::ServerNotFound(server_id.into()));
     }
 }
