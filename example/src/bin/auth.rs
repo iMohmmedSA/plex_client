@@ -41,17 +41,26 @@ async fn main() {
     let token = pin.auth_token.unwrap();
 
     println!("Your token: {}", token);
-    save_login(token, client_id);
+    save_login(token, client_id, keypair);
 }
 
 #[derive(Serialize)]
 struct SavedLogin {
     token: String,
     client_id: String,
+
+    // Keypair
+    kid: String,
+    private_key: [u8; 32],
 }
 
-fn save_login(token: String, client_id: String) {
-    let login = SavedLogin { token, client_id };
+fn save_login(token: String, client_id: String, keypair: DeviceKeypair) {
+    let login = SavedLogin {
+        token,
+        client_id,
+        kid: keypair.kid().to_string(),
+        private_key: keypair.private_key_bytes(),
+    };
     let json = serde_json::to_string_pretty(&login).expect("Failed to serialize");
     fs::write("login.json", json).expect("Failed to write login.json");
 

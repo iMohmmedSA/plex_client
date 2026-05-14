@@ -15,6 +15,7 @@ use crate::{
     error::{Error, Result},
     headers::TOKEN,
 };
+use http::Method;
 use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) enum Base {
@@ -74,7 +75,7 @@ impl Client {
         Q: Serialize,
     {
         self.request(
-            reqwest::Method::GET,
+            Method::GET,
             base,
             api,
             path,
@@ -97,13 +98,13 @@ impl Client {
         B: Serialize,
         Q: Serialize,
     {
-        self.request(reqwest::Method::POST, base, api, path, body, query)
+        self.request(Method::POST, base, api, path, body, query)
             .await
     }
 
     pub(crate) async fn request<T, B, Q>(
         &self,
-        method: reqwest::Method,
+        method: Method,
         base: Base,
         prefix: Api,
         path: &str,
@@ -146,10 +147,42 @@ impl Client {
         Ok(response.json().await?)
     }
 
+    pub(crate) async fn get_server<T, Q>(
+        &self,
+        server_id: &str,
+        prefix: Api,
+        path: &str,
+        query: Option<Q>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        Q: Serialize + Clone,
+    {
+        self.request_server(server_id, Method::GET, prefix, path, None::<()>, query)
+            .await
+    }
+
+    pub(crate) async fn post_server<T, B, Q>(
+        &self,
+        server_id: &str,
+        prefix: Api,
+        path: &str,
+        body: Option<B>,
+        query: Option<Q>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        B: Serialize + Clone,
+        Q: Serialize + Clone,
+    {
+        self.request_server(server_id, Method::POST, prefix, path, body, query)
+            .await
+    }
+
     pub(crate) async fn request_server<T, B, Q>(
         &self,
         server_id: &str,
-        method: reqwest::Method,
+        method: Method,
         prefix: Api,
         path: &str,
         body: Option<B>,

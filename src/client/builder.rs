@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use http::{
     HeaderMap, HeaderValue,
@@ -189,6 +189,7 @@ impl ClientBuilder {
 
         let http_client = reqwest::Client::builder()
             .default_headers(headers)
+            .connect_timeout(Duration::from_secs(5))
             .build()?;
 
         let inner = Arc::new(ClientInner {
