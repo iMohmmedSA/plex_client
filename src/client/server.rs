@@ -4,7 +4,10 @@ use std::{
 };
 
 use parking_lot::RwLock;
-use tokio::sync::watch::{self, Receiver, Sender};
+use tokio::{
+    sync::watch::{self, Receiver, Sender},
+    task::JoinSet,
+};
 
 use crate::{
     client::Client,
@@ -274,14 +277,21 @@ impl Client {
 
     async fn check_servers_reachable(&self) {
         let targets = self.inner.registry.servers_targets();
+        let mut set = JoinSet::new();
 
         for target in targets {
-            let status = match self.get_identity(&target.connection).await {
-                Ok(_) => Status::Reachable,
-                Err(e) if e.is_transport_failure() => Status::Unreachable,
-                Err(_) => Status::Reachable,
-            };
+            let client = self.clone();
+            set.spawn(async move {
+                let status = match client.get_identity(&target.connection).await {
+                    Ok(_) => Status::Reachable,
+                    Err(e) if e.is_transport_failure() => Status::Unreachable,
+                    Err(_) => Status::Reachable,
+                };
+                (target, status)
+            });
+        }
 
+        while let Some(Ok((target, status))) = set.join_next().await {
             self.inner.registry.mark_server_result(&target, status);
         }
     }
